@@ -8,12 +8,14 @@ import subprocess
 import uuid
 from typing import List
 import math
-from moviepy.editor import VideoFileClip
+# from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 from pydub import AudioSegment
 from pydub.silence import detect_silence
+import platform
 
 
-def split_video(video_paths: List[str], split_mode=0, clip_duration=5):
+def split_video(video_paths: List[str], split_mode=0, clip_duration=5, videos_dir=None, split_videos_dir=None):
     if split_mode == 1:
         for video_path in video_paths:
             # 获取视频的总时长（秒）
@@ -43,7 +45,13 @@ def split_video(video_paths: List[str], split_mode=0, clip_duration=5):
         for video_path in video_paths:
             video = VideoFileClip(video_path)
             audio = video.audio
-            tmp_audio_file = f"/dev/shm/{uuid.uuid4()}{int(1000 * datetime.datetime.now().timestamp())}.wav"
+            # tmp_audio_file = f"/dev/shm/{uuid.uuid4()}{int(1000 * datetime.datetime.now().timestamp())}.wav"
+
+            if platform.system() == "Linux":
+                tmp_audio_file = f"/dev/shm/{uuid.uuid4()}{int(1000 * datetime.datetime.now().timestamp())}.wav"
+            else:
+                os.makedirs("./tmp", exist_ok=True)
+                tmp_audio_file = f"./tmp/{uuid.uuid4()}{int(1000 * datetime.datetime.now().timestamp())}.wav"
             audio.write_audiofile(tmp_audio_file)
             try:
                 audio_segment = AudioSegment.from_wav(tmp_audio_file)
@@ -61,19 +69,23 @@ def split_video(video_paths: List[str], split_mode=0, clip_duration=5):
             for silence_start, silence_end in silence_intervals:
                 end_time = silence_start / 1000.0  # Convert milliseconds to seconds
                 if start_time < end_time:
-                    clip = video.subclip(start_time, end_time)
+                    # clip = video.subclip(start_time, end_time)
+                    clip = video.subclipped(start_time, end_time)
                     clips.append(clip)
                 start_time = silence_end / 1000.0  # Convert milliseconds to seconds
 
             # Add the last segment of the video
             if start_time < video.duration:
-                clips.append(video.subclip(start_time, video.duration))
+                # clips.append(video.subclip(start_time, video.duration))
+                clips.append(video.subclipped(start_time, video.duration))
             # 该文件的分割视频片段的保存文件夹位置
             split_videos_dir4one = video_path.replace(videos_dir, split_videos_dir, 1)[:-4]
             os.makedirs(split_videos_dir4one, exist_ok=True)
             for i, clip in enumerate(clips):
                 clip.write_videofile(
                     os.path.join(split_videos_dir4one, f'{i}.mp4'), audio_codec="aac")
+
+            video.close()
 
     else:
         raise NotImplementedError
@@ -118,7 +130,11 @@ if __name__ == '__main__':
         sub_tasks[i % args.n_processes].append(video_paths.pop())
         i += 1
     with concurrent.futures.ProcessPoolExecutor(args.n_processes) as executor:
-        results = executor.map(split_video, sub_tasks, [args.split_mode] * len(sub_tasks))
+        # results = executor.map(split_video, sub_tasks, [args.split_mode] * len(sub_tasks))
+        results = executor.map(split_video, sub_tasks, [args.split_mode] * len(sub_tasks),
+                             [5] * len(sub_tasks),  # clip_duration
+                             [videos_dir] * len(sub_tasks),
+                             [split_videos_dir] * len(sub_tasks))
         # 遍历结果
         for result in results:
             result

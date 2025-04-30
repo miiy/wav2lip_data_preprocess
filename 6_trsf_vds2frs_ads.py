@@ -22,6 +22,7 @@ sys.path.append(os.path.abspath("./DTLN"))
 
 from DTLN.DTLN_model import DTLN_model
 from DTLN.run_evaluation import process_file
+import platform
 
 
 # template2 = 'ffmpeg -hide_banner -loglevel panic -threads 1 -y -i {} -async 1 -ac 1 -vn -acodec pcm_s16le -ar 16000 {}'
@@ -52,11 +53,22 @@ def process_video_file(vfile: str, args, gpu_id, modelClass):
         for j, f in enumerate(preds):
             if f is None:
                 continue
+            if len(f) == 0:
+                continue
             x1, y1, x2, y2 = map(int, f[0][:-1])
             # 分辨率不达标
-            if abs(x2 - x1) < args.resolution_ratio or abs(y2 - y1) < args.resolution_ratio:
-                print(f"视频'{vfile}'因分辨率不达标被舍弃")
+            # if abs(x2 - x1) < args.resolution_ratio or abs(y2 - y1) < args.resolution_ratio:
+            #     print(f"视频'{vfile}'因分辨率不达标被舍弃")
+            #     return
+            if abs(y2 - y1) < args.resolution_ratio:
+                print(f"视频'{vfile}'因分辨率不达标被舍弃: {abs(x2 - x1)}x{abs(y2 - y1)}")
                 return
+            # 确保在坐标范围内
+            height, width = fb[j].shape[:2]
+            x1 = max(0, min(int(x1), width))
+            x2 = max(0, min(int(x2), width))
+            y1 = max(0, min(int(y1), height))
+            y2 = max(0, min(int(y2), height))
 
             face_rects.append(fb[j][y1:y2, x1:x2])
 
@@ -72,7 +84,14 @@ def process_audio_file(modelClass, vfile, wav_path):
     # subprocess.run(command, shell=True)
     os.system(command)
 
-    noise_depressed_audio_path = f"/dev/shm/{uuid.uuid4()}.wav"
+    # noise_depressed_audio_path = f"/dev/shm/{uuid.uuid4()}.wav"
+
+    
+    if platform.system() == "Linux":
+        noise_depressed_audio_path = f"/dev/shm/{uuid.uuid4()}.wav"
+    else:
+        os.makedirs("./tmp", exist_ok=True)
+        noise_depressed_audio_path = f"./tmp/{uuid.uuid4()}.wav"
     try:
         process_file(modelClass.model, wav_path,
                      noise_depressed_audio_path)  # fixme triggered tf.function retracing. Tracing is expensive
@@ -146,7 +165,14 @@ if __name__ == '__main__':
     if not video_paths:
         raise FileNotFoundError("Empty directory")
     # 按GPU拆分任务 todo blazeface裁剪大小跟sfd不一样
-    fa: List[face_alignment.FaceAlignment] = [face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_HALF_D,
+
+    if torch.backends.mps.is_available():
+        fa: List[face_alignment.FaceAlignment] = [face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_HALF_D,
+                                                                           device='mps',
+                                                                           face_detector='sfd')
+                                                ]
+    else:
+        fa: List[face_alignment.FaceAlignment] = [face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_HALF_D,
                                                                            device='cuda:{}'.format(gpuid),
                                                                            face_detector='sfd')
                                               for gpuid in range(args.ngpu)]

@@ -6,6 +6,7 @@ import subprocess
 import json
 import uuid
 import shutil
+import platform
 
 
 def get_video_info(video_path):
@@ -51,7 +52,14 @@ def convert_video(video_path, output_path):
 
 def transfer_videos_fps_sr(video_paths):
     """转换视频的帧率和音轨采样率"""
-    tmp_file = os.path.join("/dev/shm", f"{str(uuid.uuid4())}.mp4")
+    # tmp_file = os.path.join("/dev/shm", f"{str(uuid.uuid4())}.mp4")
+
+    if platform.system() == "Linux":
+        tmp_file = os.path.join("/dev/shm", f"{str(uuid.uuid4())}.mp4")
+    else:
+        os.makedirs("./tmp", exist_ok=True)
+        tmp_file = os.path.join("./tmp", f"{str(uuid.uuid4())}.mp4")
+
     for video_path in video_paths:
         video_frame_rate, audio_sample_rate = get_video_info(video_path)
         if video_frame_rate != 25 or audio_sample_rate != 16000:

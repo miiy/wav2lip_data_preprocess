@@ -1,0 +1,18 @@
+# 1_extract_audio.py
+moviepy
+# 2_noise_depress.py
+soundfile
+librosa
+tensorflow
+wavinfo
+# 3_generate_noise_depressed_video.py
+pydub
+# 4_split_videos.py
+numpy==1.26.4
+opencv-contrib-python==4.9.0.80
+opencv-python==4.9.0.80
+torch==2.2.2
+torchvision==0.17.2
+face_alignment
+# 5_convert_25fps_16000hz.py
+python_speech_features
